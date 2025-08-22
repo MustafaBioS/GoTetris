@@ -49,15 +49,23 @@ func main() {
 
 	for !rl.WindowShouldClose() {
 
+		locked := false
 		leftCol, rightCol := getPieceBounds(incomingPiece)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.Blue)
 
+		for y := int32(0); y < Rows; y++ {
+			for x := int32(0); x < columns; x++ {
+				if board[y][x] != 0 {
+					DrawTile(board[y][x]-1, tileSet, x*tile_size, y*tile_size)
+				}
+			}
+		}
+
 		for row := 0; row < 4; row++ {
 			for col := 0; col < 4; col++ {
 				if incomingPiece[row][col] == MOVING {
-
 					DrawTile(randomBlock, tileSet, (pieceX+int32(col))*tile_size, (pieceY+int32(row))*tile_size)
 
 				}
@@ -71,32 +79,39 @@ func main() {
 		}
 
 		// Right Movement
-		if rl.IsKeyPressed(rl.KeyRight) || rl.IsKeyPressed(rl.KeyD) {
-			if pieceX < columns-1-int32(rightCol) {
-				pieceX++
+		if !locked {
+			if rl.IsKeyPressed(rl.KeyRight) || rl.IsKeyPressed(rl.KeyD) {
+
+				if pieceX < columns-1-int32(rightCol) {
+					pieceX++
+				}
+
 			}
 
 		}
 
 		// Left Movement
-		if rl.IsKeyPressed(rl.KeyLeft) || rl.IsKeyPressed(rl.KeyA) {
-			if pieceX > 0-int32(leftCol) {
-				pieceX--
+		if !locked {
+			if rl.IsKeyPressed(rl.KeyLeft) || rl.IsKeyPressed(rl.KeyA) {
+
+				if pieceX > 0-int32(leftCol) {
+					pieceX--
+				}
 			}
 		}
 		select {
 		case <-ticker.C:
-			bottomRow := getPieceBottom(incomingPiece)
-			if pieceY < Rows-1-int32(bottomRow) && canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
+			if canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
 				pieceY++
+				locked = true
 			} else {
-				lockPiece(incomingPiece, board, pieceX, pieceY)
+				lockPiece(incomingPiece, board, pieceX, pieceY+1, randomBlock)
 				score++
-				fmt.Print(score)
-
+				fmt.Println(score)
+				locked = true
 				incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
-
 				ticker.Reset(time.Second)
+
 			}
 
 		default:
@@ -116,17 +131,17 @@ func main() {
 		}
 
 		// Rotation
-
-		if rl.IsKeyPressed(rl.KeyUp) || rl.IsKeyPressed(rl.KeyW) {
-			rotated := rotatePiece(incomingPiece)
-			incomingPiece = rotated
-			if canPlace(rotated, board, pieceX, pieceY, columns, Rows) {
+		if !locked {
+			if rl.IsKeyPressed(rl.KeyUp) || rl.IsKeyPressed(rl.KeyW) {
+				rotated := rotatePiece(incomingPiece)
 				incomingPiece = rotated
+				if canPlace(rotated, board, pieceX, pieceY, columns, Rows) {
+					incomingPiece = rotated
+				}
 			}
+			rl.EndDrawing()
 		}
-		rl.EndDrawing()
 	}
-
 }
 
 func TileRecFor(tileid int) rl.Rectangle {
@@ -261,14 +276,14 @@ func getPieceBottom(piece [][]int) int {
 	return bottom
 }
 
-func lockPiece(piece [][]int, board [][]int, pieceX, pieceY int32) {
+func lockPiece(piece [][]int, board [][]int, pieceX, pieceY int32, tileid int) {
 	for row := 0; row < 4; row++ {
 		for col := 0; col < 4; col++ {
 			if piece[row][col] == MOVING {
 				x := pieceX + int32(col)
 				y := pieceY + int32(row)
 				if y >= 0 && y < int32(len(board)) && x >= 0 && x < int32(len(board[0])) {
-					board[y][x] = 1
+					board[y][x] = tileid + 1
 				}
 			}
 		}
