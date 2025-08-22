@@ -1,12 +1,10 @@
 // My First Ever Go Project (made with lots of caffeine (about 3 monster cans) and a bit of AI)
 
 /*  Ideas:
-3 - Actual tetris scoring
+
 4 - Animations / Particles when row gets cleared
 5 - Background picture And Background Music
-6 - Press space to instantly drop the current block
 7 - Pause option
-8 - Fix the GameOver text positions
 
 */
 
@@ -29,6 +27,7 @@ func main() {
 	Rows := int32(30)
 	pieceX := int32(0)
 	pieceY := int32(0)
+	loseBarrier := int32(2)
 	board := make([][]int, Rows)
 	for i := range board {
 		board[i] = make([]int, columns)
@@ -76,16 +75,16 @@ func main() {
 
 		// // Lose Screen
 
-		if loss(board) {
+		if loss(board, loseBarrier) {
 			incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 
 			if !canPlace(incomingPiece, board, pieceX, pieceY, columns, Rows) {
 				gameOver = true
 				if gameOver {
 					rl.BeginDrawing()
-					rl.DrawText("Game Over!", 20, 160, 30, rl.White)
-					rl.DrawText("Press ESC To Play Again", 10, 200, 15, rl.White)
-					rl.DrawText(fmt.Sprintf("Score: %d", score), 55, 225, 20, rl.White)
+					rl.DrawText("Game Over!", 25, 160, 35, rl.White)
+					rl.DrawText("Press ESC To Play Again", 17, 200, 17, rl.White)
+					rl.DrawText(fmt.Sprintf("Score: %d", score), 65, 225, 25, rl.White)
 					rl.EndDrawing()
 					if rl.IsKeyPressed(rl.KeyEscape) {
 						board, incomingPiece, pieceX, pieceY, randomBlock, score = resetGame(columns, Rows)
@@ -137,7 +136,6 @@ func main() {
 				for col := 0; col < 4; col++ {
 					if incomingPiece[row][col] == MOVING {
 						rl.DrawRectangleLines((ghostX+int32(col))*tile_size, (ghostY+int32(row))*tile_size, tile_size, tile_size, rl.White)
-						// DrawTile(randomBlock, tileSet, (ghostX+int32(col))*tile_size, (ghostY+int32(row))*tile_size)
 
 					}
 				}
@@ -204,6 +202,13 @@ func main() {
 				}
 			}
 
+			// Instant Drop
+			if rl.IsKeyPressed(rl.KeySpace) {
+				for canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
+					pieceY++
+				}
+			}
+
 			// Drop 1 block per second.
 
 			select {
@@ -234,7 +239,6 @@ func main() {
 // FUNCTIONS SECTION
 
 func TileRecFor(tileid int) rl.Rectangle {
-	//TODO
 	if tileid > 6 {
 		panic("tileid must be between 0 and 6")
 	}
@@ -390,13 +394,16 @@ func spawnPiece() ([][]int, int32, int32, int) {
 	return newPiece, 3, 0, random
 }
 
-func loss(board [][]int) bool {
-	for col := 0; col < len(board[0]); col++ {
-		if board[0][col] != 0 {
-			return true
+func loss(board [][]int, barrier int32) bool {
+	for row := int32(0); row < barrier; row++ {
+		for col := 0; col < len(board[0]); col++ {
+			if board[row][col] != 0 {
+				return true
+			}
 		}
 	}
 	return false
+
 }
 
 func resetGame(columns, Rows int32) ([][]int, [][]int, int32, int32, int, int) {
