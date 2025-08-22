@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -11,14 +12,18 @@ import (
 const MOVING = 1
 
 func main() {
-
+	score := 0
 	tile_size := int32(16)
 	columns := int32(20)
 	Rows := int32(40)
 
-	movement_speed := 5
-	xOffset := int32(0)
-	yOffset := int32(0)
+	pieceX := int32(0)
+	pieceY := int32(0)
+
+	board := make([][]int, Rows)
+	for i := range board {
+		board[i] = make([]int, columns)
+	}
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -37,6 +42,7 @@ func main() {
 	rl.InitWindow(320, 640, "raylib [core] example - basic window")
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(60)
+	rl.DrawText(fmt.Sprintf("Score: %d", score), 180, 500, 60, rl.White)
 
 	tileSet := rl.LoadTexture("assets/tiles.png")
 	defer rl.UnloadTexture(tileSet)
@@ -51,7 +57,8 @@ func main() {
 		for row := 0; row < 4; row++ {
 			for col := 0; col < 4; col++ {
 				if incomingPiece[row][col] == MOVING {
-					DrawTile(randomBlock, tileSet, int(xOffset)+col*16, int(yOffset)+row*16)
+
+					DrawTile(randomBlock, tileSet, (pieceX+int32(col))*tile_size, (pieceY+int32(row))*tile_size)
 
 				}
 			}
@@ -63,45 +70,63 @@ func main() {
 			}
 		}
 
+		// Right Movement
 		if rl.IsKeyPressed(rl.KeyRight) || rl.IsKeyPressed(rl.KeyD) {
-			maxXOffset := (columns - 1 - int32(rightCol)) * tile_size
-			xOffset += tile_size
-			if xOffset > maxXOffset {
-				xOffset = maxXOffset
+			if pieceX < columns-1-int32(rightCol) {
+				pieceX++
 			}
+
 		}
 
+		// Left Movement
 		if rl.IsKeyPressed(rl.KeyLeft) || rl.IsKeyPressed(rl.KeyA) {
-			minXOffset := int32(leftCol) * tile_size
-			xOffset -= tile_size
-			if xOffset < minXOffset {
-				xOffset = minXOffset
+			if pieceX > 0-int32(leftCol) {
+				pieceX--
 			}
 		}
-
 		select {
 		case <-ticker.C:
-			yOffset += tile_size
-			if yOffset >= 576 {
-				yOffset = 576
-				ticker.Stop()
+			bottomRow := getPieceBottom(incomingPiece)
+			if pieceY < Rows-1-int32(bottomRow) && canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
+				pieceY++
+			} else {
+				lockPiece(incomingPiece, board, pieceX, pieceY)
+				score++
+				fmt.Print(score)
+
+				incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
+
+				ticker.Reset(time.Second)
 			}
 
 		default:
+
 		}
 
-		if rl.IsKeyDown(rl.KeyDown) || rl.IsKeyDown(rl.KeyS) {
-			yOffset = yOffset + int32(movement_speed)
-			if yOffset >= 576 {
+		// Soft Drop
+
+		if rl.IsKeyPressed(rl.KeyDown) || rl.IsKeyPressed(rl.KeyS) {
+			bottomRow := getPieceBottom(incomingPiece)
+			if pieceY < Rows-1-int32(bottomRow) {
+				pieceY++
+			} else {
+				pieceY = Rows - 1 - int32(bottomRow)
 				ticker.Stop()
-				movement_speed = 0
-				yOffset = 576
 			}
 		}
 
-		rl.EndDrawing()
+		// Rotation
 
+		if rl.IsKeyPressed(rl.KeyUp) || rl.IsKeyPressed(rl.KeyW) {
+			rotated := rotatePiece(incomingPiece)
+			incomingPiece = rotated
+			if canPlace(rotated, board, pieceX, pieceY, columns, Rows) {
+				incomingPiece = rotated
+			}
+		}
+		rl.EndDrawing()
 	}
+
 }
 
 func TileRecFor(tileid int) rl.Rectangle {
@@ -112,8 +137,8 @@ func TileRecFor(tileid int) rl.Rectangle {
 	return rl.NewRectangle(float32(tileid*16), 0, 16, 16)
 }
 
-func DrawTile(tileid int, tileSet rl.Texture2D, x int, y int) {
-	rl.DrawTextureRec(tileSet, TileRecFor(tileid), rl.NewVector2(float32(x), float32(y)), rl.White)
+func DrawTile(tileid int, tileSet rl.Texture2D, px, py int32) {
+	rl.DrawTextureRec(tileSet, TileRecFor(tileid), rl.NewVector2(float32(px), float32(py)), rl.White)
 }
 
 func initTetr(random int, incomingPiece [][]int) {
@@ -187,4 +212,75 @@ func getPieceBounds(piece [][]int) (left, right int) {
 
 	}
 	return
+}
+
+func rotatePiece(piece [][]int) [][]int {
+	size := len(piece)
+	rotated := make([][]int, size)
+	for i := range rotated {
+		rotated[i] = make([]int, size)
+	}
+
+	for row := 0; row < size; row++ {
+		for col := 0; col < size; col++ {
+			rotated[col][size-1-row] = piece[row][col]
+		}
+	}
+	return rotated
+}
+
+func canPlace(piece [][]int, board [][]int, xOffset, yOffset int32, columns, rows int32) bool {
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			if piece[row][col] == MOVING {
+				x := xOffset/int32(16) + int32(col)
+				y := yOffset/int32(16) + int32(row)
+
+				if x < 0 || x >= columns || y < 0 || y >= rows {
+					return false
+				}
+
+				if board[y][x] != 0 {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func getPieceBottom(piece [][]int) int {
+	bottom := -1
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			if piece[row][col] == MOVING && row > bottom {
+				bottom = row
+			}
+		}
+	}
+	return bottom
+}
+
+func lockPiece(piece [][]int, board [][]int, pieceX, pieceY int32) {
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			if piece[row][col] == MOVING {
+				x := pieceX + int32(col)
+				y := pieceY + int32(row)
+				if y >= 0 && y < int32(len(board)) && x >= 0 && x < int32(len(board[0])) {
+					board[y][x] = 1
+				}
+			}
+		}
+	}
+}
+
+func spawnPiece() ([][]int, int32, int32, int) {
+	newPiece := make([][]int, 4)
+	for i := range newPiece {
+		newPiece[i] = make([]int, 4)
+	}
+	random := int(rl.GetRandomValue(0, 6))
+	initTetr(random, newPiece)
+	return newPiece, 0, 0, random
 }
