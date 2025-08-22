@@ -1,4 +1,14 @@
-// My First Ever Go Project
+// My First Ever Go Project (made with lots of caffeine (about 3 monster cans) and a bit of AI)
+
+/*  Ideas:
+3 - Actual tetris scoring
+4 - Animations / Particles when row gets cleared
+5 - Background picture And Background Music
+6 - Press space to instantly drop the current block
+7 - Pause option
+8 - Fix the GameOver text positions
+
+*/
 
 package main
 
@@ -13,17 +23,17 @@ const MOVING = 1
 
 func main() {
 	score := 0
+	gameOver := false
 	tile_size := int32(16)
-	columns := int32(20)
-	Rows := int32(40)
-
+	columns := int32(15)
+	Rows := int32(30)
 	pieceX := int32(0)
 	pieceY := int32(0)
-
 	board := make([][]int, Rows)
 	for i := range board {
 		board[i] = make([]int, columns)
 	}
+	showGrid := true
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -39,7 +49,7 @@ func main() {
 
 	initTetr(random, incomingPiece)
 
-	rl.InitWindow(320, 640, "raylib [core] example - basic window")
+	rl.InitWindow(int32(columns*tile_size), int32(Rows*tile_size), "GoTetris")
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(60)
 	rl.DrawText(fmt.Sprintf("Score: %d", score), 180, 500, 60, rl.White)
@@ -47,102 +57,181 @@ func main() {
 	tileSet := rl.LoadTexture("assets/tiles.png")
 	defer rl.UnloadTexture(tileSet)
 
+	icon := rl.LoadImage("assets/logo.png")
+	rl.SetWindowIcon(*icon)
+	rl.UnloadImage(icon)
+
 	for !rl.WindowShouldClose() {
 
-		locked := false
-		leftCol, rightCol := getPieceBounds(incomingPiece)
+		ghostX := pieceX
+		ghostY := pieceY
+		for canPlace(incomingPiece, board, ghostX, ghostY+1, columns, Rows) {
+			ghostY++
+		}
 
-		rl.BeginDrawing()
-		rl.ClearBackground(rl.Blue)
+		ghostBlock := make([][]int, 4)
+		for i := range ghostBlock {
+			ghostBlock[i] = make([]int, 4)
+		}
 
-		for y := int32(0); y < Rows; y++ {
-			for x := int32(0); x < columns; x++ {
-				if board[y][x] != 0 {
-					DrawTile(board[y][x]-1, tileSet, x*tile_size, y*tile_size)
+		// // Lose Screen
+
+		if loss(board) {
+			incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
+
+			if !canPlace(incomingPiece, board, pieceX, pieceY, columns, Rows) {
+				gameOver = true
+				if gameOver {
+					rl.BeginDrawing()
+					rl.DrawText("Game Over!", 20, 160, 30, rl.White)
+					rl.DrawText("Press ESC To Play Again", 10, 200, 15, rl.White)
+					rl.DrawText(fmt.Sprintf("Score: %d", score), 55, 225, 20, rl.White)
+					rl.EndDrawing()
+					if rl.IsKeyPressed(rl.KeyEscape) {
+						board, incomingPiece, pieceX, pieceY, randomBlock, score = resetGame(columns, Rows)
+						gameOver = false
+					}
 				}
 			}
 		}
 
-		for row := 0; row < 4; row++ {
-			for col := 0; col < 4; col++ {
-				if incomingPiece[row][col] == MOVING {
-					DrawTile(randomBlock, tileSet, (pieceX+int32(col))*tile_size, (pieceY+int32(row))*tile_size)
+		if !gameOver {
+			locked := false
+			leftCol, rightCol := getPieceBounds(incomingPiece)
 
+			rl.BeginDrawing()
+			rl.ClearBackground(rl.Blue)
+
+			// Main Tetris Blocks
+
+			for y := int32(0); y < Rows; y++ {
+				for x := int32(0); x < columns; x++ {
+					if board[y][x] != 0 {
+						DrawTile(board[y][x]-1, tileSet, x*tile_size, y*tile_size)
+					}
 				}
 			}
-		}
 
-		for y := int32(0); y < Rows; y++ {
-			for x := int32(0); x < columns; x++ {
-				rl.DrawRectangleLines(x*tile_size, y*tile_size, tile_size, tile_size, rl.Black)
+			for row := 0; row < 4; row++ {
+				for col := 0; col < 4; col++ {
+					if incomingPiece[row][col] == MOVING {
+						DrawTile(randomBlock, tileSet, (pieceX+int32(col))*tile_size, (pieceY+int32(row))*tile_size)
+
+					}
+				}
 			}
-		}
 
-		// Right Movement
-		if !locked {
+			// Grid Lines
+
+			if showGrid {
+				for y := int32(0); y < Rows; y++ {
+					for x := int32(0); x < columns; x++ {
+						rl.DrawRectangleLines(x*tile_size, y*tile_size, tile_size, tile_size, rl.Black)
+					}
+				}
+			}
+
+			// Ghost Blocks
+
+			for row := 0; row < 4; row++ {
+				for col := 0; col < 4; col++ {
+					if incomingPiece[row][col] == MOVING {
+						rl.DrawRectangleLines((ghostX+int32(col))*tile_size, (ghostY+int32(row))*tile_size, tile_size, tile_size, rl.White)
+						// DrawTile(randomBlock, tileSet, (ghostX+int32(col))*tile_size, (ghostY+int32(row))*tile_size)
+
+					}
+				}
+			}
+
+			// KEYPRESS SECTION
+
+			// Right Movement
 			if rl.IsKeyPressed(rl.KeyRight) || rl.IsKeyPressed(rl.KeyD) {
-
 				if pieceX < columns-1-int32(rightCol) {
-					pieceX++
+					if canPlace(incomingPiece, board, pieceX+1, pieceY, columns, Rows) {
+						pieceX++
+					}
 				}
 
 			}
 
-		}
-
-		// Left Movement
-		if !locked {
+			// Left Movement
 			if rl.IsKeyPressed(rl.KeyLeft) || rl.IsKeyPressed(rl.KeyA) {
 
 				if pieceX > 0-int32(leftCol) {
-					pieceX--
+					if canPlace(incomingPiece, board, pieceX-1, pieceY, columns, Rows) {
+						pieceX--
+					}
 				}
 			}
-		}
-		select {
-		case <-ticker.C:
-			if canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
-				pieceY++
-				locked = true
-			} else {
-				lockPiece(incomingPiece, board, pieceX, pieceY+1, randomBlock)
-				score++
-				fmt.Println(score)
-				locked = true
-				incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
+
+			// Soft Drop
+
+			if rl.IsKeyPressed(rl.KeyDown) || rl.IsKeyPressed(rl.KeyS) {
+				bottomRow := getPieceBottom(incomingPiece)
+				if pieceY < Rows-0-int32(bottomRow) && canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
+					pieceY++
+				} else {
+					lockPiece(incomingPiece, board, pieceX, pieceY, randomBlock)
+					var cleared int
+					board, cleared = clearRow(board)
+					if cleared > 0 {
+						score += cleared * 100
+					}
+					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
+				}
+			}
+
+			// Rotation
+			if !locked {
+				if rl.IsKeyPressed(rl.KeyUp) || rl.IsKeyPressed(rl.KeyW) {
+					rotated := rotatePiece(incomingPiece)
+					if canPlace(rotated, board, pieceX, pieceY, columns, Rows) {
+						incomingPiece = rotated
+					}
+				}
+			}
+
+			// Show/Hide Grid
+
+			if showGrid {
+				if rl.IsKeyPressed(rl.KeyG) {
+					showGrid = false
+				}
+			} else if !showGrid {
+				if rl.IsKeyPressed(rl.KeyG) {
+					showGrid = true
+				}
+			}
+
+			// Drop 1 block per second.
+
+			select {
+			case <-ticker.C:
+				bottomRow := getPieceBottom(incomingPiece)
+				if pieceY < Rows-0-int32(bottomRow) && canPlace(incomingPiece, board, pieceX, pieceY+1, columns, Rows) {
+					pieceY++
+				} else {
+					lockPiece(incomingPiece, board, pieceX, pieceY, randomBlock)
+					var cleared int
+					board, cleared = clearRow(board)
+					score += pointsForCleared(cleared)
+
+					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
+				}
 				ticker.Reset(time.Second)
 
+			default:
+
 			}
 
-		default:
-
-		}
-
-		// Soft Drop
-
-		if rl.IsKeyPressed(rl.KeyDown) || rl.IsKeyPressed(rl.KeyS) {
-			bottomRow := getPieceBottom(incomingPiece)
-			if pieceY < Rows-1-int32(bottomRow) {
-				pieceY++
-			} else {
-				pieceY = Rows - 1 - int32(bottomRow)
-				ticker.Stop()
-			}
-		}
-
-		// Rotation
-		if !locked {
-			if rl.IsKeyPressed(rl.KeyUp) || rl.IsKeyPressed(rl.KeyW) {
-				rotated := rotatePiece(incomingPiece)
-				incomingPiece = rotated
-				if canPlace(rotated, board, pieceX, pieceY, columns, Rows) {
-					incomingPiece = rotated
-				}
-			}
 			rl.EndDrawing()
 		}
+
 	}
 }
+
+// FUNCTIONS SECTION
 
 func TileRecFor(tileid int) rl.Rectangle {
 	//TODO
@@ -248,8 +337,8 @@ func canPlace(piece [][]int, board [][]int, xOffset, yOffset int32, columns, row
 	for row := 0; row < 4; row++ {
 		for col := 0; col < 4; col++ {
 			if piece[row][col] == MOVING {
-				x := xOffset/int32(16) + int32(col)
-				y := yOffset/int32(16) + int32(row)
+				x := xOffset + int32(col)
+				y := yOffset + int32(row)
 
 				if x < 0 || x >= columns || y < 0 || y >= rows {
 					return false
@@ -297,5 +386,80 @@ func spawnPiece() ([][]int, int32, int32, int) {
 	}
 	random := int(rl.GetRandomValue(0, 6))
 	initTetr(random, newPiece)
-	return newPiece, 0, 0, random
+
+	return newPiece, 3, 0, random
+}
+
+func loss(board [][]int) bool {
+	for col := 0; col < len(board[0]); col++ {
+		if board[0][col] != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func resetGame(columns, Rows int32) ([][]int, [][]int, int32, int32, int, int) {
+	score := 0
+
+	board := make([][]int, Rows)
+	for i := range board {
+		board[i] = make([]int, columns)
+	}
+
+	newPiece := make([][]int, 4)
+	for i := range newPiece {
+		newPiece[i] = make([]int, 4)
+	}
+	random := int(rl.GetRandomValue(0, 6))
+	initTetr(random, newPiece)
+
+	pieceX, pieceY := int32(3), int32(0)
+	return board, newPiece, pieceX, pieceY, random, score
+}
+
+func clearRow(board [][]int) ([][]int, int) {
+	rows := len(board)
+	cols := len(board[0])
+	newBoard := make([][]int, rows)
+	for i := 0; i < rows; i++ {
+		newBoard[i] = make([]int, cols)
+	}
+
+	writeRow := rows - 1
+	cleared := 0
+
+	for row := rows - 1; row >= 0; row-- {
+		full := true
+		for col := 0; col < cols; col++ {
+			if board[row][col] == 0 {
+				full = false
+				break
+			}
+		}
+
+		if full {
+			cleared++
+		} else {
+			copy(newBoard[writeRow], board[row])
+			writeRow--
+		}
+	}
+
+	return newBoard, cleared
+}
+
+func pointsForCleared(rowsCleared int) int {
+	switch rowsCleared {
+	case 1:
+		return 100
+	case 2:
+		return 300
+	case 3:
+		return 500
+	case 4:
+		return 800
+	default:
+		return 0
+	}
 }
