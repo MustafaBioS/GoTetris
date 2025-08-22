@@ -18,7 +18,13 @@ import (
 
 const MOVING = 1
 
+type RowAnimation struct {
+	row      int
+	progress float32
+}
+
 func main() {
+
 	score := 0
 	gameOver := false
 	tile_size := int32(16)
@@ -50,7 +56,6 @@ func main() {
 	rl.InitWindow(int32(columns*tile_size), int32(Rows*tile_size), "GoTetris")
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(60)
-	rl.DrawText(fmt.Sprintf("Score: %d", score), 180, 500, 60, rl.White)
 
 	tileSet := rl.LoadTexture("assets/tiles.png")
 	defer rl.UnloadTexture(tileSet)
@@ -58,6 +63,8 @@ func main() {
 	icon := rl.LoadImage("assets/logo.png")
 	rl.SetWindowIcon(*icon)
 	rl.UnloadImage(icon)
+
+	var animateRows []RowAnimation
 
 	for !rl.WindowShouldClose() {
 
@@ -85,6 +92,7 @@ func main() {
 					rl.DrawText("Press ESC To Play Again", 17, 200, 17, rl.White)
 					rl.DrawText(fmt.Sprintf("Score: %d", score), 65, 225, 25, rl.White)
 					rl.EndDrawing()
+
 					if rl.IsKeyPressed(rl.KeyEscape) {
 						board, incomingPiece, pieceX, pieceY, randomBlock, score = resetGame(columns, Rows)
 						gameOver = false
@@ -107,6 +115,24 @@ func main() {
 					if board[y][x] != 0 {
 						DrawTile(board[y][x]-1, tileSet, x*tile_size, y*tile_size)
 					}
+				}
+			}
+
+			// Animation
+
+			for i := 0; i < len(animateRows); i++ {
+				a := &animateRows[i]
+				alpha := uint8(255 * (1 - a.progress))
+				for x := 0; x < int(columns); x++ {
+					if board[a.row][x] != 0 {
+						rl.DrawRectangle(int32(x)*tile_size, int32(a.row)*tile_size, tile_size, tile_size, rl.NewColor(255, 255, 255, alpha))
+					}
+				}
+				a.progress += 0.05
+				if a.progress >= 1 {
+					removeRows(board, a.row)
+					animateRows = append(animateRows[:i], animateRows[i+1:]...)
+					i--
 				}
 			}
 
@@ -171,9 +197,12 @@ func main() {
 				} else {
 					lockPiece(incomingPiece, board, pieceX, pieceY, randomBlock)
 					var cleared int
-					board, cleared = clearRow(board)
-					if cleared > 0 {
-						score += cleared * 100
+					newAnimations := clearRow(board)
+					animateRows = append(animateRows, newAnimations...)
+					if cleared > len(newAnimations) {
+						if cleared > 0 {
+							score += cleared * 100
+						}
 					}
 					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 				}
@@ -217,10 +246,12 @@ func main() {
 					pieceY++
 				} else {
 					lockPiece(incomingPiece, board, pieceX, pieceY, randomBlock)
-					var cleared int
-					board, cleared = clearRow(board)
-					score += pointsForCleared(cleared)
-
+					newAnimations := clearRow(board)
+					animateRows = append(animateRows, newAnimations...)
+					cleared := len(newAnimations)
+					if cleared > 0 {
+						score += pointsForCleared(cleared)
+					}
 					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 				}
 				ticker.Reset(time.Second)
@@ -424,26 +455,22 @@ func resetGame(columns, Rows int32) ([][]int, [][]int, int32, int32, int, int) {
 	return board, newPiece, pieceX, pieceY, random, score
 }
 
-func clearRow(board [][]int) ([][]int, int) {
-	type RowAnimation struct {
-		row int
-		progress float32
-	}
-	
+func clearRow(board [][]int) []RowAnimation {
+
 	rows := len(board)
 	cols := len(board[0])
 	animations := []RowAnimation{}
 
 	for row := 0; row < rows; row++ {
 		full := true
-		for col := 0; col < cols; col++
+		for col := 0; col < cols; col++ {
 			if board[row][col] == 0 {
 				full = false
 				break
 			}
-	}
-	if full {
-		animations = append(animations, RowAnimation{row: row, progress: 0})
+		}
+		if full {
+			animations = append(animations, RowAnimation{row: row, progress: 0})
 		}
 	}
 	return animations
@@ -462,4 +489,12 @@ func pointsForCleared(rowsCleared int) int {
 	default:
 		return 0
 	}
+}
+
+func removeRows(board [][]int, rowToRemove int) {
+	cols := len(board[0])
+	for y := rowToRemove; y > 0; y-- {
+		copy(board[y], board[y-1])
+	}
+	board[0] = make([]int, cols)
 }
