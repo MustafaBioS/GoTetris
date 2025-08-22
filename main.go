@@ -1,7 +1,6 @@
 // My First Ever Go Project (made with lots of caffeine (about 3 monster cans) and a bit of AI)
 
 /*  Ideas:
-
 4 - Animations / Particles when row gets cleared
 5 - Background picture And Background Music
 7 - Pause option
@@ -426,34 +425,28 @@ func resetGame(columns, Rows int32) ([][]int, [][]int, int32, int32, int, int) {
 }
 
 func clearRow(board [][]int) ([][]int, int) {
+	type RowAnimation struct {
+		row int
+		progress float32
+	}
+	
 	rows := len(board)
 	cols := len(board[0])
-	newBoard := make([][]int, rows)
-	for i := 0; i < rows; i++ {
-		newBoard[i] = make([]int, cols)
-	}
+	animations := []RowAnimation{}
 
-	writeRow := rows - 1
-	cleared := 0
-
-	for row := rows - 1; row >= 0; row-- {
+	for row := 0; row < rows; row++ {
 		full := true
-		for col := 0; col < cols; col++ {
+		for col := 0; col < cols; col++
 			if board[row][col] == 0 {
 				full = false
 				break
 			}
-		}
-
-		if full {
-			cleared++
-		} else {
-			copy(newBoard[writeRow], board[row])
-			writeRow--
+	}
+	if full {
+		animations = append(animations, RowAnimation{row: row, progress: 0})
 		}
 	}
-
-	return newBoard, cleared
+	return animations
 }
 
 func pointsForCleared(rowsCleared int) int {
