@@ -34,6 +34,7 @@ func main() {
 	pieceY := int32(0)
 	loseBarrier := int32(2)
 	level := 1 + score/500
+	comboStreak := 0
 	board := make([][]int, Rows)
 	for i := range board {
 		board[i] = make([]int, columns)
@@ -41,7 +42,13 @@ func main() {
 	showGrid := true
 	isPaused := false
 	mute := false
-
+	type floatingScore struct {
+		x, y     int32
+		points   int
+		timer    float32
+		duration float32
+	}
+	var floatingScores []floatingScore
 	baseDrop := time.Second
 	speedIncrease := 100 * time.Millisecond
 	dropInterval := baseDrop - time.Duration(level-1)*speedIncrease
@@ -164,6 +171,21 @@ func main() {
 			rl.BeginDrawing()
 			rl.ClearBackground(rl.Blue)
 
+			// Floating Score
+			for i := 0; i < len(floatingScores); i++ {
+				fs := &floatingScores[i]
+				alpha := uint8(255 * (1 - fs.timer/fs.duration))
+				rl.DrawText(fmt.Sprintf("+%d", fs.points), fs.x, fs.y, 24, rl.NewColor(255, 255, 255, alpha))
+
+				fs.y -= 1
+				fs.timer += 1.0 / float32(FPS)
+
+				if fs.timer >= fs.duration {
+					floatingScores = append(floatingScores[:i], floatingScores[i+1:]...)
+					i--
+				}
+			}
+
 			// Main Tetris Blocks
 
 			for y := int32(0); y < Rows; y++ {
@@ -213,6 +235,19 @@ func main() {
 					}
 				}
 			}
+
+			// Perfect Clear Bonus
+
+			// if IsBoardEmpty(board) {
+			// 	score += 1000
+			// 	floatingScores = append(floatingScores, floatingScore{
+			// 		x: int32(columns/2-2) * tile_size,
+			// 		y: int32(Rows/2) * tile_size,
+			// 		points: 1000,
+			// 		timer: 0,
+			// 		duration: 1.5,
+			// 	})
+			// }
 
 			// Grid Lines
 
@@ -270,12 +305,48 @@ func main() {
 					animateRows = append(animateRows, newAnimations...)
 
 					if cleared > 0 {
+						topRow := newAnimations[0].row
+						pts := pointsForCleared(cleared)
 						score += pointsForCleared(cleared)
 						rl.PlaySound(scoreSound)
+						floatingScores = append(floatingScores, floatingScore{
+							x:        (columns/2 - 1) * tile_size,
+							y:        int32(topRow) * tile_size,
+							points:   pts,
+							timer:    0,
+							duration: 1.0,
+						})
 
+						comboStreak++
+						if comboStreak > 1 {
+							comboPoints := 50 * (comboStreak - 1)
+							score += comboPoints
+							floatingScores = append(floatingScores, floatingScore{
+								x:        (columns/2 - 1) * tile_size,
+								y:        (int32(topRow))*tile_size - 20,
+								points:   comboPoints,
+								timer:    0,
+								duration: 1.0,
+							})
+						}
+
+						if isBoardEmpty(board) {
+							score += 1000
+							floatingScores = append(floatingScores, floatingScore{
+								x:        int32(columns/2-2) * tile_size,
+								y:        int32(Rows/2) * tile_size,
+								points:   1000,
+								timer:    0,
+								duration: 1.5,
+							})
+						}
+
+					} else {
+						comboStreak = 0
 					}
 					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 				}
+
 			}
 
 			// Rotation
@@ -320,8 +391,42 @@ func main() {
 					animateRows = append(animateRows, newAnimations...)
 					cleared := len(newAnimations)
 					if cleared > 0 {
+						topRow := newAnimations[0].row
+						pts := pointsForCleared(cleared)
 						score += pointsForCleared(cleared)
 						rl.PlaySound(scoreSound)
+
+						floatingScores = append(floatingScores, floatingScore{
+							x:        (columns/2 - 1) * tile_size,
+							y:        int32(topRow) * tile_size,
+							points:   pts,
+							timer:    0,
+							duration: 1.0,
+						})
+						comboStreak++
+						if comboStreak > 1 {
+							comboPoints := 50 * (comboStreak - 1)
+							score += comboPoints
+							floatingScores = append(floatingScores, floatingScore{
+								x:        (columns/2 - 1) * tile_size,
+								y:        int32(topRow) * tile_size,
+								points:   comboPoints,
+								timer:    0,
+								duration: 1.0,
+							})
+						}
+						if isBoardEmpty(board) {
+							score += 1000
+							floatingScores = append(floatingScores, floatingScore{
+								x:        int32(columns/2-2) * tile_size,
+								y:        int32(Rows/2) * tile_size,
+								points:   1000,
+								timer:    0,
+								duration: 1.5,
+							})
+						}
+					} else {
+						comboStreak = 0
 					}
 					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 				}
@@ -568,4 +673,15 @@ func removeRows(board [][]int, rowToRemove int) {
 		copy(board[y], board[y-1])
 	}
 	board[0] = make([]int, cols)
+}
+
+func isBoardEmpty(board [][]int) bool {
+	for y := 0; y < len(board); y++ {
+		for x := 0; x < len(board[0]); x++ {
+			if board[y][x] != 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
