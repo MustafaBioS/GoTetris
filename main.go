@@ -2,9 +2,9 @@
 
 /*  Ideas:
 
-7 - Pause option
 
-*/
+
+ */
 
 package main
 
@@ -38,7 +38,7 @@ func main() {
 	}
 	showGrid := true
 	isPaused := false
-
+	mute := false
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -69,9 +69,9 @@ func main() {
 	defer rl.CloseAudioDevice()
 
 	bgAudio := rl.LoadMusicStream("assets/tetris.mp3")
+	rl.PlayMusicStream(bgAudio)
 	rl.SetMusicVolume(bgAudio, 0.1)
 	defer rl.UnloadMusicStream(bgAudio)
-	rl.PlayMusicStream(bgAudio)
 
 	scoreSound := rl.LoadSound("assets/collect-points-190037.mp3")
 	rl.SetSoundVolume(scoreSound, 1)
@@ -81,6 +81,18 @@ func main() {
 	var animateRows []RowAnimation
 
 	for !rl.WindowShouldClose() {
+
+		if rl.IsKeyPressed(rl.KeyM) {
+			mute = !mute
+			if mute {
+				rl.PauseMusicStream(bgAudio)
+				fmt.Println("paused")
+			} else {
+				rl.ResumeMusicStream(bgAudio)
+				fmt.Println("unpaused")
+			}
+		}
+
 		rl.UpdateMusicStream(bgAudio)
 
 		ghostX := pieceX
@@ -117,21 +129,26 @@ func main() {
 		}
 
 		if isPaused {
-			rl.DrawText("Paused", 45, 160, 40, rl.White)
+			rl.DrawRectangle(0, 0, columns*tile_size, Rows*tile_size, rl.NewColor(0, 0, 0, 10))
+			rl.DrawText("Paused", 45, 200, 40, rl.White)
 			rl.EndDrawing()
 		}
 
 		// Pause
 
-		if rl.IsKeyPressed(rl.KeyP) {
-			if isPaused {
-				isPaused = false
-			} else if !isPaused {
+		if !isPaused {
+			if rl.IsKeyPressed(rl.KeyP) {
 				isPaused = true
+				fmt.Println("working2")
+			}
+		} else if isPaused {
+			if rl.IsKeyPressed(rl.KeyP) {
+				isPaused = false
+				fmt.Println("working3")
 			}
 		}
 
-		if !gameOver || !isPaused {
+		if !gameOver && !isPaused {
 			locked := false
 			leftCol, rightCol := getPieceBounds(incomingPiece)
 
