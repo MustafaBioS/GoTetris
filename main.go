@@ -1,8 +1,7 @@
 // My First Ever Go Project (made with lots of caffeine (about 3 monster cans) and a bit of AI)
 
 /*  Ideas:
-4 - Animations / Particles when row gets cleared
-5 - Background picture And Background Music
+
 7 - Pause option
 
 */
@@ -38,6 +37,7 @@ func main() {
 		board[i] = make([]int, columns)
 	}
 	showGrid := true
+	isPaused := false
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -55,7 +55,9 @@ func main() {
 
 	rl.InitWindow(int32(columns*tile_size), int32(Rows*tile_size), "GoTetris")
 	defer rl.CloseWindow()
-	rl.SetTargetFPS(60)
+	FPS := 60
+
+	rl.SetTargetFPS(int32(FPS))
 
 	tileSet := rl.LoadTexture("assets/tiles.png")
 	defer rl.UnloadTexture(tileSet)
@@ -63,10 +65,23 @@ func main() {
 	icon := rl.LoadImage("assets/logo.png")
 	rl.SetWindowIcon(*icon)
 	rl.UnloadImage(icon)
+	rl.InitAudioDevice()
+	defer rl.CloseAudioDevice()
+
+	bgAudio := rl.LoadMusicStream("assets/tetris.mp3")
+	rl.SetMusicVolume(bgAudio, 0.1)
+	defer rl.UnloadMusicStream(bgAudio)
+	rl.PlayMusicStream(bgAudio)
+
+	scoreSound := rl.LoadSound("assets/collect-points-190037.mp3")
+	rl.SetSoundVolume(scoreSound, 1)
+
+	defer rl.UnloadSound(scoreSound)
 
 	var animateRows []RowAnimation
 
 	for !rl.WindowShouldClose() {
+		rl.UpdateMusicStream(bgAudio)
 
 		ghostX := pieceX
 		ghostY := pieceY
@@ -101,7 +116,22 @@ func main() {
 			}
 		}
 
-		if !gameOver {
+		if isPaused {
+			rl.DrawText("Paused", 45, 160, 40, rl.White)
+			rl.EndDrawing()
+		}
+
+		// Pause
+
+		if rl.IsKeyPressed(rl.KeyP) {
+			if isPaused {
+				isPaused = false
+			} else if !isPaused {
+				isPaused = true
+			}
+		}
+
+		if !gameOver || !isPaused {
 			locked := false
 			leftCol, rightCol := getPieceBounds(incomingPiece)
 
@@ -196,13 +226,14 @@ func main() {
 					pieceY++
 				} else {
 					lockPiece(incomingPiece, board, pieceX, pieceY, randomBlock)
-					var cleared int
 					newAnimations := clearRow(board)
+					cleared := len(newAnimations)
 					animateRows = append(animateRows, newAnimations...)
-					if cleared > len(newAnimations) {
-						if cleared > 0 {
-							score += cleared * 100
-						}
+
+					if cleared > 0 {
+						score += pointsForCleared(cleared)
+						rl.PlaySound(scoreSound)
+
 					}
 					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 				}
@@ -251,16 +282,17 @@ func main() {
 					cleared := len(newAnimations)
 					if cleared > 0 {
 						score += pointsForCleared(cleared)
+						rl.PlaySound(scoreSound)
 					}
 					incomingPiece, pieceX, pieceY, randomBlock = spawnPiece()
 				}
-				ticker.Reset(time.Second)
 
 			default:
 
 			}
 
 			rl.EndDrawing()
+
 		}
 
 	}
