@@ -11,6 +11,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -23,8 +24,20 @@ type RowAnimation struct {
 	progress float32
 }
 
-func main() {
+type Particle struct {
+	x, y     float32
+	vx, vy   float32
+	color    rl.Color
+	alpha    float32
+	lifetime float32
+	duration float32
+}
 
+var particles []Particle
+
+func main() {
+	var currentColor rl.Color = rl.Blue
+	var targetColor rl.Color = rl.Blue
 	score := 0
 	gameOver := false
 	tile_size := int32(16)
@@ -67,9 +80,24 @@ func main() {
 		incomingPiece[i] = make([]int, 4)
 	}
 
-	initTetr(random, incomingPiece)
+	var levelColors = []rl.Color{
+		rl.Blue,
+		rl.Orange,
+		rl.Purple,
+		rl.Red,
+		rl.SkyBlue,
+		rl.Yellow,
+	}
 
-	rl.InitWindow(int32(columns*tile_size), int32(Rows*tile_size), "GoTetris")
+	var shakeDuration float32
+	var shakeIntensity int32 = 5
+	factor := shakeDuration / 0.3
+	var shakeX = int32(float32(rl.GetRandomValue(-shakeIntensity, shakeIntensity)) * factor)
+	var shakeY = int32(float32(rl.GetRandomValue(-shakeIntensity, shakeIntensity)) * factor)
+
+	initTetr(random, incomingPiece)
+	const hudHeight = 100
+	rl.InitWindow(int32(columns*tile_size), int32(Rows*tile_size)+hudHeight, "GoTetris")
 	defer rl.CloseWindow()
 	FPS := 60
 
@@ -169,15 +197,16 @@ func main() {
 			leftCol, rightCol := getPieceBounds(incomingPiece)
 
 			rl.BeginDrawing()
-			rl.ClearBackground(rl.Blue)
 
 			// Floating Score
 			for i := 0; i < len(floatingScores); i++ {
 				fs := &floatingScores[i]
 				alpha := uint8(255 * (1 - fs.timer/fs.duration))
-				rl.DrawText(fmt.Sprintf("+%d", fs.points), fs.x, fs.y, 24, rl.NewColor(255, 255, 255, alpha))
+				rl.DrawText(fmt.Sprintf("+%d", fs.points), fs.x, fs.y+hudHeight, 24, rl.NewColor(255, 255, 255, alpha))
+				t := fs.timer / fs.duration
 
-				fs.y -= 1
+				fs.y -= int32(1 + 5*(1-t))
+				fs.x += int32(math.Sin(float64(t*math.Pi*2)) * 2)
 				fs.timer += 1.0 / float32(FPS)
 
 				if fs.timer >= fs.duration {
@@ -191,10 +220,24 @@ func main() {
 			for y := int32(0); y < Rows; y++ {
 				for x := int32(0); x < columns; x++ {
 					if board[y][x] != 0 {
-						DrawTile(board[y][x]-1, tileSet, x*tile_size, y*tile_size)
+						DrawTile(board[y][x]-1, tileSet, x*tile_size+shakeX, y*tile_size+hudHeight+shakeX)
 					}
 				}
 			}
+
+			// Shake
+			if shakeDuration > 0 {
+				shakeDuration -= 1.0 / float32(FPS)
+				shakeX = int32(rl.GetRandomValue(-shakeIntensity, shakeIntensity))
+				shakeY = int32(rl.GetRandomValue(-shakeIntensity, shakeIntensity))
+			} else {
+				shakeX = 0
+				shakeY = 0
+			}
+
+			// Particles
+			updateParticles(1.0 / float32(FPS))
+			drawParticles(tile_size)
 
 			// level / score
 
@@ -230,31 +273,34 @@ func main() {
 			for row := 0; row < 4; row++ {
 				for col := 0; col < 4; col++ {
 					if incomingPiece[row][col] == MOVING {
-						DrawTile(randomBlock, tileSet, (pieceX+int32(col))*tile_size, (pieceY+int32(row))*tile_size)
+						DrawTile(randomBlock, tileSet, (pieceX+int32(col))*tile_size+shakeX, (pieceY+int32(row))*tile_size+hudHeight+shakeY)
 
 					}
 				}
 			}
 
-			// Perfect Clear Bonus
+			// BG Change
 
-			// if IsBoardEmpty(board) {
-			// 	score += 1000
-			// 	floatingScores = append(floatingScores, floatingScore{
-			// 		x: int32(columns/2-2) * tile_size,
-			// 		y: int32(Rows/2) * tile_size,
-			// 		points: 1000,
-			// 		timer: 0,
-			// 		duration: 1.5,
-			// 	})
-			// }
+			targetColor = levelColors[(level-1)%len(levelColors)]
 
-			// Grid Lines
+			lerp := func(a, b uint8, t float32) uint8 {
+				return uint8(float32(a)*(1-t) + float32(b)*t)
+			}
+
+			t := float32(0.05)
+			currentColor.R = lerp(currentColor.R, targetColor.R, t)
+			currentColor.G = lerp(currentColor.G, targetColor.G, t)
+			currentColor.B = lerp(currentColor.B, targetColor.B, t)
+			currentColor.A = 255
+
+			rl.ClearBackground(currentColor)
+
+			// Grid
 
 			if showGrid {
 				for y := int32(0); y < Rows; y++ {
 					for x := int32(0); x < columns; x++ {
-						rl.DrawRectangleLines(x*tile_size, y*tile_size, tile_size, tile_size, rl.Black)
+						rl.DrawRectangleLines(x*tile_size+shakeX, y*tile_size+hudHeight+shakeY, tile_size, tile_size, rl.Black)
 					}
 				}
 			}
@@ -264,11 +310,17 @@ func main() {
 			for row := 0; row < 4; row++ {
 				for col := 0; col < 4; col++ {
 					if incomingPiece[row][col] == MOVING {
-						rl.DrawRectangleLines((ghostX+int32(col))*tile_size, (ghostY+int32(row))*tile_size, tile_size, tile_size, rl.White)
+						rl.DrawRectangleLines((ghostX+int32(col))*tile_size, (ghostY+int32(row))*tile_size+hudHeight, tile_size, tile_size, rl.White)
 
 					}
 				}
 			}
+
+			// HUD
+			textColor := getTextColor(currentColor)
+			rl.DrawText(fmt.Sprintf("Score: %d", score), 10, 10, 20, textColor)
+			rl.DrawText(fmt.Sprintf("Level: %d", level), 10, 40, 20, textColor)
+			rl.DrawText(fmt.Sprintf("Combo: %d", comboStreak), 10, 70, 20, textColor)
 
 			// KEYPRESS SECTION
 
@@ -316,6 +368,7 @@ func main() {
 							timer:    0,
 							duration: 1.0,
 						})
+						shakeDuration = 0.3
 
 						comboStreak++
 						if comboStreak > 1 {
@@ -395,6 +448,7 @@ func main() {
 						pts := pointsForCleared(cleared)
 						score += pointsForCleared(cleared)
 						rl.PlaySound(scoreSound)
+						spawnParticles(columns, topRow, tile_size, rl.White, 20)
 
 						floatingScores = append(floatingScores, floatingScore{
 							x:        (columns/2 - 1) * tile_size,
@@ -684,4 +738,51 @@ func isBoardEmpty(board [][]int) bool {
 		}
 	}
 	return true
+}
+
+func spawnParticles(columns int32, row int, tileSize int32, color rl.Color, amount int) {
+	for i := 0; i < amount; i++ {
+		p := Particle{
+			x:        float32(rl.GetRandomValue(0, int32(columns*tileSize-tileSize))),
+			y:        float32(row) * float32(tileSize),
+			vx:       float32(rl.GetRandomValue(-2, 2)),
+			vy:       float32(rl.GetRandomValue(-5, -1)),
+			color:    color,
+			alpha:    1.0,
+			lifetime: 0,
+			duration: 1.0,
+		}
+		particles = append(particles, p)
+	}
+}
+
+func updateParticles(dt float32) {
+	for i := 0; i < len(particles); i++ {
+		p := &particles[i]
+		p.x += p.vx
+		p.y += p.vy
+		p.lifetime += dt
+		p.alpha = 1 - p.lifetime/p.duration
+
+		if p.lifetime >= p.duration {
+			particles = append(particles[:i], particles[i+1:]...)
+			i--
+		}
+	}
+}
+
+func drawParticles(tileSize int32) {
+	for _, p := range particles {
+		c := p.color
+		c.A = uint8(p.alpha * 255)
+		rl.DrawRectangle(int32(p.x), int32(p.y), tileSize/2, tileSize/2, c)
+	}
+}
+
+func getTextColor(bg rl.Color) rl.Color {
+	brightness := 0.299*float32(bg.R) + 0.587*float32(bg.G) + 0.114*float32(bg.B)
+	if brightness > 150 {
+		return rl.Black
+	}
+	return rl.White
 }
