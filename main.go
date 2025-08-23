@@ -2,8 +2,7 @@
 
 /*  Ideas:
 
-2 - +100 or whatever the combo is appearing for a second when you delete a row.
-3 - maybe see if i can find something nice to change the background to, if not i'll keep the blue color.
+1 - Press Enter To Play option
 
 */
 
@@ -43,6 +42,23 @@ func main() {
 	tile_size := int32(16)
 	columns := int32(15)
 	Rows := int32(30)
+
+	startMenu := true
+	var blinkVisible bool = true
+	var blinkTimer float32 = 0
+
+	animPiece := make([][]int, 4)
+	for i := range animPiece {
+		animPiece[i] = make([]int, 4)
+	}
+
+	animX := int32(3)
+	animY := int32(0)
+	animTicker := time.NewTicker(500 * time.Millisecond)
+	defer animTicker.Stop()
+
+	initTetr(int(rl.GetRandomValue(0, 6)), animPiece)
+
 	pieceX := int32(0)
 	pieceY := int32(0)
 	loseBarrier := int32(2)
@@ -96,6 +112,7 @@ func main() {
 	var shakeY = int32(float32(rl.GetRandomValue(-shakeIntensity, shakeIntensity)) * factor)
 
 	initTetr(random, incomingPiece)
+
 	const hudHeight = 100
 	rl.InitWindow(int32(columns*tile_size), int32(Rows*tile_size)+hudHeight, "GoTetris")
 	defer rl.CloseWindow()
@@ -125,6 +142,48 @@ func main() {
 	var animateRows []RowAnimation
 
 	for !rl.WindowShouldClose() {
+		if startMenu {
+			rl.BeginDrawing()
+			rl.ClearBackground(rl.Black)
+
+			rl.DrawText("GoTetris", 50, 100+hudHeight, 30, rl.White)
+			for row := 0; row < 4; row++ {
+				for col := 0; col < 4; col++ {
+					if animPiece[row][col] == MOVING {
+						DrawTile(int(rl.GetRandomValue(0, 6)), tileSet,
+							(animX+int32(col))*tile_size, (animY+int32(row))*tile_size+hudHeight)
+					}
+				}
+			}
+
+			if blinkVisible {
+
+				rl.DrawText("Press ENTER To Start", 33, 150+hudHeight, 15, rl.White)
+			}
+
+			rl.EndDrawing()
+
+			select {
+			case <-animTicker.C:
+				animY++
+				if animY > Rows-4 {
+					animY = 0
+					initTetr(int(rl.GetRandomValue(0, 6)), animPiece)
+				}
+			default:
+			}
+
+			blinkTimer += 1.0 / float32(FPS)
+			if blinkTimer >= 0.5 {
+				blinkVisible = !blinkVisible
+				blinkTimer = 0
+			}
+
+			if rl.IsKeyPressed(rl.KeyEnter) {
+				startMenu = false
+			}
+			continue
+		}
 
 		if rl.IsKeyPressed(rl.KeyM) {
 			mute = !mute
@@ -159,9 +218,9 @@ func main() {
 				gameOver = true
 				if gameOver {
 					rl.BeginDrawing()
-					rl.DrawText("Game Over!", 25, 160, 35, rl.White)
-					rl.DrawText("Press ESC To Play Again", 17, 200, 17, rl.White)
-					rl.DrawText(fmt.Sprintf("Score: %d", score), 65, 225, 25, rl.White)
+					rl.DrawText("Game Over!", 25, 160+hudHeight, 35, rl.White)
+					rl.DrawText("Press ESC To Play Again", 17, 200+hudHeight, 17, rl.White)
+					rl.DrawText(fmt.Sprintf("Score: %d", score), 65, 225+hudHeight, 25, rl.White)
 					rl.EndDrawing()
 
 					if rl.IsKeyPressed(rl.KeyEscape) {
@@ -283,10 +342,6 @@ func main() {
 
 			targetColor = levelColors[(level-1)%len(levelColors)]
 
-			lerp := func(a, b uint8, t float32) uint8 {
-				return uint8(float32(a)*(1-t) + float32(b)*t)
-			}
-
 			t := float32(0.05)
 			currentColor.R = lerp(currentColor.R, targetColor.R, t)
 			currentColor.G = lerp(currentColor.G, targetColor.G, t)
@@ -356,6 +411,10 @@ func main() {
 					cleared := len(newAnimations)
 					animateRows = append(animateRows, newAnimations...)
 
+					if cleared == 4 {
+						shakeDuration = 0.3
+					}
+
 					if cleared > 0 {
 						topRow := newAnimations[0].row
 						pts := pointsForCleared(cleared)
@@ -368,7 +427,6 @@ func main() {
 							timer:    0,
 							duration: 1.0,
 						})
-						shakeDuration = 0.3
 
 						comboStreak++
 						if comboStreak > 1 {
@@ -443,6 +501,9 @@ func main() {
 					newAnimations := clearRow(board)
 					animateRows = append(animateRows, newAnimations...)
 					cleared := len(newAnimations)
+					if cleared == 4 {
+						shakeDuration = 0.3
+					}
 					if cleared > 0 {
 						topRow := newAnimations[0].row
 						pts := pointsForCleared(cleared)
@@ -785,4 +846,8 @@ func getTextColor(bg rl.Color) rl.Color {
 		return rl.Black
 	}
 	return rl.White
+}
+
+func lerp(a, b uint8, t float32) uint8 {
+	return uint8(float32(a)*(1-t) + float32(b)*t)
 }
