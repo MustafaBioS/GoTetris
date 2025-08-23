@@ -2,9 +2,10 @@
 
 /*  Ideas:
 
+2 - +100 or whatever the combo is appearing for a second when you delete a row.
+3 - maybe see if i can find something nice to change the background to, if not i'll keep the blue color.
 
-
- */
+*/
 
 package main
 
@@ -32,6 +33,7 @@ func main() {
 	pieceX := int32(0)
 	pieceY := int32(0)
 	loseBarrier := int32(2)
+	level := 1 + score/500
 	board := make([][]int, Rows)
 	for i := range board {
 		board[i] = make([]int, columns)
@@ -39,7 +41,14 @@ func main() {
 	showGrid := true
 	isPaused := false
 	mute := false
-	ticker := time.NewTicker(time.Second)
+
+	baseDrop := time.Second
+	speedIncrease := 100 * time.Millisecond
+	dropInterval := baseDrop - time.Duration(level-1)*speedIncrease
+	if dropInterval < 100*time.Millisecond {
+		dropInterval = 100 * time.Millisecond
+	}
+	ticker := time.NewTicker(dropInterval)
 	defer ticker.Stop()
 
 	rl.SetRandomSeed(uint32(time.Now().UnixNano()))
@@ -163,6 +172,19 @@ func main() {
 						DrawTile(board[y][x]-1, tileSet, x*tile_size, y*tile_size)
 					}
 				}
+			}
+
+			// level / score
+
+			newLevel := 1 + score/500
+			if newLevel != level {
+				level = newLevel
+				dropInterval = baseDrop - time.Duration(level-1)*speedIncrease
+				if dropInterval < 100*time.Millisecond {
+					dropInterval = 100 * time.Millisecond
+				}
+				ticker.Stop()
+				ticker = time.NewTicker(dropInterval)
 			}
 
 			// Animation
